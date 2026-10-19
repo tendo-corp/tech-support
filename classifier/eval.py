@@ -1,7 +1,7 @@
-"""Scores an engine against the labelled fixtures.
+"""Live eval: runs JEV over the labelled fixtures (leave-one-out few-shot) and scores every answer.
 
-    python -m classifier.eval                  # rules engine, offline
-    python -m classifier.eval --engine llm -v  # OpenRouter, needs OPEN_ROUTER_KEY + CLASSIFIER_MODEL
+    OPEN_ROUTER_KEY=... python -m classifier.eval -v
+    python -m classifier.eval --only ct-01,ct-26 -v
 """
 
 from __future__ import annotations
@@ -9,12 +9,14 @@ from __future__ import annotations
 import argparse
 import sys
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from .dataset import Case, load_cases
-from .domain import AnswerValue, Kind
-from .engines.base import Engine, EngineError
+from .domain import AnswerValue, EngineResult, Kind
+from .fewshot import FewShotSelector
+from .jev import Jev, JevConfig, JevError
 from .questionnaire import QUESTIONS
 
 PERCENT_TOLERANCE = 20
@@ -36,6 +38,11 @@ class Report:
     # (expected type, predicted type) -> count
     confusion: Counter = field(default_factory=Counter)
     mistakes: list[tuple[str, str, AnswerValue, AnswerValue]] = field(default_factory=list)
+    cost: float = 0.0
+    # Which models the router picked, with spend per model.
+    models: Counter = field(default_factory=Counter)
+    model_cost: Counter = field(default_factory=Counter)
+    seconds: list[float] = field(default_factory=list)
 
     ITEM = "contract_item"
 
@@ -43,7 +50,13 @@ class Report:
         return self.correct[question_id] / self.asked[question_id] if self.asked[question_id] else 0.0
 
     def format(self, verbose: bool = False) -> str:
-        lines = [f"engine: {self.engine}   cases: {self.total}   errors: {len(self.failed)}", ""]
+        lines = [f"model: {self.engine}   cases: {self.total}   errors: {len(self.failed)}"]
+        if self.seconds:
+            median = sorted(self.seconds)[len(self.seconds) // 2]
+            lines.append(f"cost: ${self.cost:.4f}   latency median: {median:.1f}s   max: {max(self.seconds):.1f}s")
+        for model, n in self.models.most_common():
+            lines.append(f"  router → {model}: {n} req, ${self.model_cost[model]:.4f}")
+        lines.append("")
         for qid in [q.id for q in QUESTIONS] + [self.ITEM]:
             lines.append(f"  {qid:<20} {self.accuracy(qid):6.1%}  ({self.correct[qid]}/{self.asked[qid]})")
         lines += ["", "  type confusion (expected → predicted):"]
@@ -58,18 +71,28 @@ class Report:
         return "\n".join(lines)
 
 
-def evaluate(engine: Engine, cases: Sequence[Case], client_only: bool = True) -> Report:
-    report = Report(engine=engine.name)
-    for case in cases:
-        if client_only and case.message.author_side != "client":
-            continue
-        report.total += 1
+def evaluate(jev: Jev, cases: Sequence[Case], workers: int = 4) -> Report:
+    def run(case: Case) -> EngineResult | JevError:
         try:
-            result = engine.answer(case.message, case.context)
-            predicted = result.answers
-        except EngineError as exc:
-            report.failed.append(f"{case.id}: {exc}")
+            return jev.answer(case.message, case.context)
+        except JevError as exc:
+            return exc
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        results = list(pool.map(run, cases))
+
+    report = Report(engine=jev.name)
+    for case, result in zip(cases, results):
+        report.total += 1
+        if isinstance(result, JevError):
+            report.failed.append(f"{case.id}: {result}")
             continue
+        cost = float((result.raw.get("usage") or {}).get("cost") or 0)
+        report.cost += cost
+        report.models[result.engine] += 1
+        report.model_cost[result.engine] += cost
+        report.seconds.append(result.raw.get("seconds", 0.0))
+        predicted = result.answers
         report.confusion[(case.expected["type"], predicted.get("type"))] += 1
         for q in QUESTIONS:
             expected = case.expected[q.id]
@@ -91,36 +114,28 @@ def evaluate(engine: Engine, cases: Sequence[Case], client_only: bool = True) ->
     return report
 
 
-def _build_engine(name: str, k: int) -> Engine:
-    if name == "rules":
-        from .engines.rules import RulesEngine
-
-        return RulesEngine()
-    from .engines.llm import LLMEngine, OpenRouterConfig
-    from .fewshot import FewShotSelector
-
-    return LLMEngine(OpenRouterConfig.from_env(), selector=FewShotSelector(load_cases(), k=k))
-
-
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--engine", choices=("rules", "llm"), default="rules")
-    parser.add_argument("--shots", type=int, default=8, help="few-shot examples per request (llm)")
+    parser.add_argument("--shots", type=int, default=8, help="few-shot examples per request")
     parser.add_argument("--only", help="comma-separated case ids")
-    parser.add_argument("--include-team", action="store_true", help="also score team messages")
+    parser.add_argument("--clients-only", action="store_true", help="skip team messages")
+    parser.add_argument("--workers", type=int, default=4, help="parallel requests")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args(argv)
 
-    cases = load_cases()
+    all_cases = load_cases()
+    cases = all_cases
     if args.only:
         wanted = set(args.only.split(","))
         cases = [c for c in cases if c.id in wanted]
+    if args.clients_only:
+        cases = [c for c in cases if c.message.author_side == "client"]
     try:
-        engine = _build_engine(args.engine, args.shots)
-    except EngineError as exc:
+        jev = Jev(JevConfig.from_env(), selector=FewShotSelector(all_cases, k=args.shots))
+    except JevError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
-    print(evaluate(engine, cases, client_only=not args.include_team).format(verbose=args.verbose))
+    print(evaluate(jev, cases, workers=args.workers).format(verbose=args.verbose))
     return 0
 
 

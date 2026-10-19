@@ -15,15 +15,19 @@ def _similarity(a: set[str], b: set[str]) -> float:
 
 class FewShotSelector:
     def __init__(self, cases: Sequence[Case], k: int = 8):
-        # Team chatter is filtered before the LLM, so it makes poor examples.
-        self.cases = [c for c in cases if c.message.author_side == "client"]
+        self.cases = list(cases)
         self.k = k
         self._stems = {c.id: _stems(c.message.full_text) for c in self.cases}
 
     def select(self, message: Message) -> list[Case]:
         query = _stems(message.full_text)
+        # Team messages teach the model to recognise our own chatter; keep one similar example of it.
+        if message.author_side == "team":
+            pool = [c for c in self.cases if c.message.author_side == "team" and c.message.text != message.text]
+            pool.sort(key=lambda c: _similarity(query, self._stems[c.id]), reverse=True)
+            return pool[: self.k]
         # Never show the model the message it is classifying (keeps eval honest).
-        pool = [c for c in self.cases if c.message.text != message.text]
+        pool = [c for c in self.cases if c.message.author_side == "client" and c.message.text != message.text]
         ranked = sorted(pool, key=lambda c: _similarity(query, self._stems[c.id]), reverse=True)
 
         chosen: list[Case] = []

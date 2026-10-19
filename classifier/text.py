@@ -1,4 +1,4 @@
-"""Tiny text helpers shared by the offline parts (few-shot ranking, contract matching)."""
+"""Tiny text helpers for ranking few-shot examples."""
 
 from __future__ import annotations
 
@@ -13,8 +13,3 @@ _STOP = {"это", "как", "что", "для", "при", "уже", "или", "
 def stems(text: str) -> set[str]:
     # Crude stemming: Russian inflection mostly lives in the last letters.
     return {w[:5] for w in _WORD.findall(text.lower()) if len(w) > 2 and w not in _STOP}
-
-
-def similarity(a: set[str], b: set[str]) -> float:
-    """Overlap normalised by the smaller set, so a short phrase can match a long message."""
-    return len(a & b) / min(len(a), len(b)) if a and b else 0.0

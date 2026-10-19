@@ -6,11 +6,9 @@ Source of truth is ClickUp (field Billing); fixtures/contract/*.json is a snapsh
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
 from pathlib import Path
 
 from .domain import Contract, ContractItem
-from .text import similarity, stems
 
 DEFAULT_DIR = Path(__file__).resolve().parent.parent / "fixtures" / "contract"
 BILLING = ("paid", "to_offer")
@@ -42,30 +40,3 @@ def render(contract: Contract) -> str:
             if item.billing == billing:
                 lines.append(f"- [{item.id}] {item.title}. {item.summary}")
     return "\n".join(lines)
-
-
-@dataclass(frozen=True)
-class Match:
-    item: ContractItem
-    score: float
-
-
-class ContractMatcher:
-    """Bag-of-stems lookup of the contract item a message talks about. Crude, but free and offline."""
-
-    def __init__(self, contract: Contract, threshold: float = 0.12):
-        self.contract = contract
-        self.threshold = threshold
-        self._index = [
-            (item, [stems(item.title)] + [stems(p) for p in item.phrases])
-            for item in contract.items
-        ]
-
-    def match(self, text: str) -> Match | None:
-        query = stems(text)
-        best: Match | None = None
-        for item, docs in self._index:
-            score = max(similarity(query, d) for d in docs)
-            if best is None or score > best.score:
-                best = Match(item, score)
-        return best if best and best.score >= self.threshold else None

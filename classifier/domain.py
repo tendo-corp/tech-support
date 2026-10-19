@@ -1,4 +1,4 @@
-"""Core types. No I/O here: engines, storage and the bot depend on this module, not the other way round."""
+"""Core types. No I/O here: the JEV client, storage and the bot depend on this module, not the other way round."""
 
 from __future__ import annotations
 
@@ -123,8 +123,6 @@ class EngineResult:
     answers: Answers
     engine: str
     reasoning: str = ""
-    # 0..1, how much the engine trusts itself; used to decide whether to escalate to a smarter engine.
-    confidence: float = 0.5
     raw: dict[str, Any] = field(default_factory=dict)
 
 

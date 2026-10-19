@@ -1,4 +1,4 @@
-"""Prompt construction for LLM engines."""
+"""Prompt for JEV: system rules, contract, few-shot examples."""
 
 from __future__ import annotations
 
@@ -21,9 +21,8 @@ SYSTEM = """Ты — технический менеджер студии раз
 Ответь на анкету по сообщению. Анкета:
 {questions}
 
-Верни только JSON вида {{"answers": {{"<id>": <значение>, ...}}, "contract_item": "<id задачи из контракта или null>", \
-"reasoning": "<одно-два предложения>"}}.
-Для вопросов с выбором отвечай одной буквой. Если is_task=false, вопросы с пометкой «только если is_task=true» = null."""
+Ответ — JSON по схеме: answers (все вопросы анкеты), contract_item (id задачи из контракта или null), reasoning.
+Если is_task=false, вопросы с пометкой «только если is_task=true» = null."""
 
 
 def format_message(message: Message) -> str:

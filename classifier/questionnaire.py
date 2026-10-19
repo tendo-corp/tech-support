@@ -113,6 +113,32 @@ def normalize_answers(raw: dict) -> Answers:
     return answers
 
 
+def json_schema() -> dict:
+    """Strict JSON schema for the model's reply; enums make invalid answers impossible."""
+    props: dict = {}
+    for q in QUESTIONS:
+        if q.kind is Kind.BOOL:
+            prop: dict = {"type": "boolean"}
+        elif q.kind is Kind.PERCENT:
+            prop = {"type": "integer", "minimum": 0, "maximum": 100}
+        else:
+            prop = {"type": "string", "enum": list(q.options)}
+        if q.only_if_task:
+            prop = {"anyOf": [prop, {"type": "null"}]}
+        props[q.id] = {**prop, "description": q.text}
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["answers", "contract_item", "reasoning"],
+        "properties": {
+            "answers": {"type": "object", "additionalProperties": False, "required": list(props), "properties": props},
+            "contract_item": {"anyOf": [{"type": "string"}, {"type": "null"}],
+                              "description": "id задачи из контракта, к которой относится сообщение, иначе null"},
+            "reasoning": {"type": "string", "description": "одно-два предложения: почему так"},
+        },
+    }
+
+
 def render(questions: tuple[Question, ...] = QUESTIONS) -> str:
     """Human/LLM readable form of the questionnaire."""
     lines = []
