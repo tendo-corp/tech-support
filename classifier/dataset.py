@@ -6,7 +6,8 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from .domain import Answers, Attachment, Message
+from .contract import load_contracts
+from .domain import Answers, Attachment, Context, Message
 from .questionnaire import QUESTIONS, normalize_answers
 
 DEFAULT_DIR = Path(__file__).resolve().parent.parent / "fixtures" / "classifier"
@@ -23,9 +24,12 @@ class Case:
     message: Message
     expected: Answers
     note: str = ""
+    context: Context | None = None
+    # ClickUp task id the message is about (labelled when contract_match is A or B).
+    contract_item: str | None = None
 
 
-def _parse_case(chat: str, raw: dict, source: Path) -> Case:
+def _parse_case(chat: str, raw: dict, source: Path, context: Context | None = None) -> Case:
     where = f"{source.name}:{raw.get('id', '?')}"
     try:
         message = Message(
@@ -52,14 +56,30 @@ def _parse_case(chat: str, raw: dict, source: Path) -> Case:
             raise FixtureError(f"{where}: '{q.id}' is missing or invalid ({given.get(q.id)!r})")
         if not applies and given.get(q.id) is not None:
             raise FixtureError(f"{where}: '{q.id}' must be null when is_task is false")
-    return Case(id=raw["id"], chat=chat, message=message, expected=expected, note=raw.get("note", ""))
+    item_id = raw.get("contract_item")
+    if expected.get("contract_match") in ("A", "B"):
+        items = {i.id: i for i in context.contract.items} if context and context.contract else {}
+        if item_id not in items:
+            raise FixtureError(f"{where}: contract_match={expected['contract_match']} needs a contract_item from the contract")
+        if items[item_id].in_contract != (expected["contract_match"] == "A"):
+            raise FixtureError(f"{where}: contract_match disagrees with billing of {item_id}")
+    elif item_id is not None:
+        raise FixtureError(f"{where}: contract_item set but contract_match is {expected.get('contract_match')!r}")
+    return Case(id=raw["id"], chat=chat, message=message, expected=expected, note=raw.get("note", ""),
+                context=context, contract_item=item_id)
 
 
 def load_cases(directory: Path = DEFAULT_DIR) -> list[Case]:
+    contracts = load_contracts(directory.parent / "contract")
     cases: list[Case] = []
     for path in sorted(directory.glob("*.json")):
         data = json.loads(path.read_text(encoding="utf-8"))
-        cases.extend(_parse_case(data.get("chat", path.stem), raw, path) for raw in data["cases"])
+        context = None
+        if data.get("contract"):
+            if data["contract"] not in contracts:
+                raise FixtureError(f"{path.name}: unknown contract {data['contract']!r}")
+            context = Context(project=data.get("chat", ""), contract=contracts[data["contract"]])
+        cases.extend(_parse_case(data.get("chat", path.stem), raw, path, context) for raw in data["cases"])
     ids = [c.id for c in cases]
     duplicates = {i for i in ids if ids.count(i) > 1}
     if duplicates:

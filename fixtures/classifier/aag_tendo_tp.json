@@ -1,6 +1,7 @@
 {
   "chat": "AAG & Tendo_ТП",
   "source": "скриншоты переписки, октябрь 2026",
+  "contract": "aag_tenders",
   "cases": [
     {
       "id": "tp-01",
@@ -21,28 +22,33 @@
       "id": "tp-03",
       "author": "Владислав М.",
       "text": "1. Приглашение на тендер нужно доработать (нужна редактируемая форма/шаблон текста для отправки)",
-      "attachments": [{"kind": "photo", "text": "Письмо «Приглашение к тендеру Т-2026-196» от A-tender@aag.company: стандартный текст, номер тендера, название, объект, вид работ, срок подачи, ссылка на форму."}],
-      "expected": {"is_task": true, "type": "B", "bug_probability": 10, "coverage": "C", "complexity": "C", "urgency": "C", "needs_clarification": true},
+      "attachments": [
+        {
+          "kind": "photo",
+          "text": "Письмо «Приглашение к тендеру Т-2026-196» от A-tender@aag.company: стандартный текст, номер тендера, название, объект, вид работ, срок подачи, ссылка на форму."
+        }
+      ],
+      "expected": {"is_task": true, "type": "B", "bug_probability": 10, "coverage": "C", "contract_match": "C", "complexity": "C", "urgency": "C", "needs_clarification": true},
       "note": "Марк ответил: сейчас можно только добавить сообщение к стандартным полям, если нужно больше — опишите желаемое поведение в файле."
     },
     {
       "id": "tp-04",
       "author": "Владислав М.",
       "text": "2. Форма шаблона должна открываться только после входа в личный кабинет, сейчас её видит кто угодно, у кого есть ссылка",
-      "expected": {"is_task": true, "type": "B", "bug_probability": 35, "coverage": "C", "complexity": "C", "urgency": "B", "needs_clarification": true},
+      "expected": {"is_task": true, "type": "B", "bug_probability": 35, "coverage": "C", "contract_match": "C", "complexity": "C", "urgency": "B", "needs_clarification": true},
       "note": "Середина текста закрыта на скриншоте, восстановлена по смыслу. Марк позже назвал это «расширение, которое мы обсуждаем»; Natalie уточняла сценарий регистрации подрядчика."
     },
     {
       "id": "tp-05",
       "author": "Владислав М.",
       "text": "3. К карточке тендера нужно добавить контакты ответственного сотрудника для связи. Все сообщения подрядчикам должны сопровождаться подписью с контактами",
-      "expected": {"is_task": true, "type": "B", "bug_probability": 5, "coverage": "C", "complexity": "C", "urgency": "C", "needs_clarification": false}
+      "expected": {"is_task": true, "type": "B", "bug_probability": 5, "coverage": "C", "contract_match": "C", "complexity": "C", "urgency": "C", "needs_clarification": false}
     },
     {
       "id": "tp-06",
       "author": "Владислав М.",
       "text": "4. При подаче КП обязательное поле – шаблон договора. Предлагаю переименовать в пустое поле для заполнения и снять обязательную загрузку, с возможностью ничего не грузить (грузить нам же наш шаблон договора, если они согласны с условиями, не имеет смысла)",
-      "expected": {"is_task": true, "type": "B", "bug_probability": 10, "coverage": "B", "complexity": "A", "urgency": "C", "needs_clarification": false},
+      "expected": {"is_task": true, "type": "B", "bug_probability": 10, "coverage": "B", "contract_match": "C", "complexity": "A", "urgency": "C", "needs_clarification": false},
       "note": "Марк: «4 и 6 сразу взяли в работу» — мелкая доработка."
     },
     {
@@ -56,8 +62,13 @@
       "id": "tp-08",
       "author": "Владислав М.",
       "text": "6. Скрыть для контрагентов",
-      "attachments": [{"kind": "photo", "text": "Скриншот окна с кнопкой «Понятно»."}],
-      "expected": {"is_task": true, "type": "B", "bug_probability": 10, "coverage": "B", "complexity": "A", "urgency": "C", "needs_clarification": false},
+      "attachments": [
+        {
+          "kind": "photo",
+          "text": "Скриншот окна с кнопкой «Понятно»."
+        }
+      ],
+      "expected": {"is_task": true, "type": "B", "bug_probability": 10, "coverage": "B", "contract_match": "C", "complexity": "A", "urgency": "C", "needs_clarification": false},
       "note": "Взяли в работу сразу вместе с п.4."
     },
     {
@@ -108,7 +119,7 @@
       "id": "tp-15",
       "author": "Natalie",
       "text": "4. Шаблон договора при подаче КП - Не надо давать подрядчику лишнюю возможность думать про протокол разногласий))\nПереименовать в «Дополнительные файлы (при необходимости)»",
-      "expected": {"is_task": true, "type": "B", "bug_probability": 0, "coverage": "B", "complexity": "A", "urgency": "C", "needs_clarification": false}
+      "expected": {"is_task": true, "type": "B", "bug_probability": 0, "coverage": "B", "contract_match": "C", "complexity": "A", "urgency": "C", "needs_clarification": false}
     },
     {
       "id": "tp-16",
@@ -142,15 +153,25 @@
       "id": "tp-20",
       "author": "Владислав М.",
       "text": "Всем привет\n@belphegorr Ксения Киселева @Marin4cool необходимо утвердить список статусов",
-      "attachments": [{"kind": "photo", "text": "Таблица статусов тендера: Черновик, Сбор КП, Принятие решения, Решение принято, Подписание договора, Выполнение работ, Завершён, Отменён — что значит и что делает система."}],
+      "attachments": [
+        {
+          "kind": "photo",
+          "text": "Таблица статусов тендера: Черновик, Сбор КП, Принятие решения, Решение принято, Подписание договора, Выполнение работ, Завершён, Отменён — что значит и что делает система."
+        }
+      ],
       "expected": {"is_task": false, "type": "D", "bug_probability": 0, "coverage": "D"}
     },
     {
       "id": "tp-21",
       "author": "Владислав М.",
       "text": "@monforje @it_tuser При выгрузке листов КП - они становятся заблокированными\nдаже скролинг не работает",
-      "attachments": [{"kind": "photo", "text": "Окно «Выгрузка сравнения», тендер 194, отмечено «Приложить листы КП подрядчиков (бланки ФКП с их ценами)», файл 194_sravnenie_2026-10-19_1043.xlsx."}],
-      "expected": {"is_task": true, "type": "A", "bug_probability": 90, "coverage": "A", "complexity": "B", "urgency": "B", "needs_clarification": false},
+      "attachments": [
+        {
+          "kind": "photo",
+          "text": "Окно «Выгрузка сравнения», тендер 194, отмечено «Приложить листы КП подрядчиков (бланки ФКП с их ценами)», файл 194_sravnenie_2026-10-19_1043.xlsx."
+        }
+      ],
+      "expected": {"is_task": true, "type": "A", "bug_probability": 90, "coverage": "A", "contract_match": "C", "complexity": "B", "urgency": "B", "needs_clarification": false},
       "note": "«Взяли в работу, чиним» 18:20 → «Починено» 19:14."
     },
     {
@@ -187,7 +208,7 @@
       "id": "tp-26",
       "author": "Владислав М.",
       "text": "Очень прошу при заполнении анкеты убрать формулировку \"Хотя бы один\" для указание примеров работ",
-      "expected": {"is_task": true, "type": "B", "bug_probability": 5, "coverage": "B", "complexity": "A", "urgency": "C", "needs_clarification": false}
+      "expected": {"is_task": true, "type": "B", "bug_probability": 5, "coverage": "B", "contract_match": "C", "complexity": "A", "urgency": "C", "needs_clarification": false}
     }
   ]
 }

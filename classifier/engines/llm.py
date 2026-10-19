@@ -98,5 +98,9 @@ class LLMEngine:
             engine=f"llm:{payload.get('model', self.config.model)}",
             reasoning=str(data.get("reasoning", "")),
             confidence=0.85,
-            raw={"usage": payload.get("usage"), "examples": [c.id for c in examples]},
+            raw={
+                "usage": payload.get("usage"),
+                "examples": [c.id for c in examples],
+                "contract_item": data.get("contract_item") or None,
+            },
         )

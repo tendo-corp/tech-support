@@ -75,10 +75,32 @@ class Message:
 
 
 @dataclass(frozen=True)
+class ContractItem:
+    id: str  # ClickUp task id
+    billing: str  # paid = входит в контракт, to_offer = не входит, предлагаем отдельно
+    title: str
+    summary: str = ""
+    phrases: tuple[str, ...] = ()
+
+    @property
+    def in_contract(self) -> bool:
+        return self.billing == "paid"
+
+
+@dataclass(frozen=True)
+class Contract:
+    id: str
+    project: str
+    rules: tuple[str, ...] = ()
+    items: tuple[ContractItem, ...] = ()
+
+
+@dataclass(frozen=True)
 class Context:
     project: str = ""
-    # What the contract covers; helps the model separate warranty bugs from new work.
+    # Free-text scope for customers without a formal contract file.
     contract_scope: str = ""
+    contract: Contract | None = None
 
 
 class Category(str, Enum):
@@ -112,6 +134,8 @@ class Verdict:
     is_task: bool
     # True = входит в контракт (гарантийный баг или мелкая доработка), False = выход за рамки, None = не задача
     in_scope: bool | None
+    # ClickUp task id the message is about, when the engine could tell.
+    contract_item: str | None
     bug_probability: int | None
     estimate_hours: tuple[float, float | None] | None
     priority: Priority | None

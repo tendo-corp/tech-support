@@ -2,18 +2,11 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Sequence
 
 from .dataset import Case
 from .domain import Message
-
-_WORD = re.compile(r"[a-zа-яё0-9]+", re.IGNORECASE)
-
-
-def _stems(text: str) -> set[str]:
-    # Crude stemming: Russian inflection mostly lives in the last letters.
-    return {w[:5] for w in _WORD.findall(text.lower()) if len(w) > 2}
+from .text import stems as _stems
 
 
 def _similarity(a: set[str], b: set[str]) -> float:

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 
+from ..contract import ContractMatcher
 from ..domain import Answers, Context, EngineResult, Message
 from ..questionnaire import normalize_answers
 
@@ -26,6 +27,9 @@ BUG = _compile([
     r"некликабельн\w*", r"не\s*нажима\w*", r"заблокирован\w*", r"\bзавис\w*", r"\bпада\w*", r"\bупал\w*",
     r"\bвылета\w*", r"\bсломал\w*", r"\bглюч\w*", r"свалил\w*", r"пропал\w*", r"\bотличаются\b",
     r"\b(?:500|502|503|504)\b", r"\bcrash\w*", r"\bbroken\b",
+    r"уезжа\w*", r"разъезжа\w*", r"не\s+(?:приход\w*|происход\w*|закрепля\w*|обновля\w*|загружа\w*|отправля\w*)",
+    r"пропал\w*", r"задвоил\w*", r"дубл\w*", r"пуст(?:ое|ой|ая|ые)\b", r"ведёт\s+в\s+никуда|ведет\s+в\s+никуда",
+    r"белый\s+экран", r"не\s+можем\s+(?:зайти|войти)", r"показывается\s+\w+,?\s+а\b",
 ])
 
 FEATURE = _compile([
@@ -68,9 +72,33 @@ def _count(patterns: list[re.Pattern[str]], text: str) -> int:
 class RulesEngine:
     name = "rules"
 
+    def __init__(self):
+        self._matchers: dict[str, ContractMatcher] = {}
+
     def answer(self, message: Message, context: Context | None = None) -> EngineResult:
         answers, confidence, reason = self._classify(message)
-        return EngineResult(answers=normalize_answers(answers), engine=self.name, reasoning=reason, confidence=confidence)
+        raw: dict = {}
+        if answers.get("is_task") and context and context.contract:
+            reason += self._apply_contract(answers, message, context)
+            raw["contract_item"] = answers.pop("_item", None)
+        return EngineResult(answers=normalize_answers(answers), engine=self.name, reasoning=reason,
+                            confidence=confidence, raw=raw)
+
+    def _apply_contract(self, answers: Answers, message: Message, context: Context) -> str:
+        contract = context.contract
+        matcher = self._matchers.get(contract.id)
+        if matcher is None:
+            matcher = self._matchers[contract.id] = ContractMatcher(contract)
+        found = matcher.match(message.full_text)
+        if found is None:
+            answers["contract_match"] = "C"
+            return "; в контракте не найдено"
+        answers["_item"] = found.item.id
+        answers["contract_match"] = "A" if found.item.in_contract else "B"
+        # A bug in delivered code is ours whatever the item; a request follows the item's billing.
+        if answers["type"] == "B":
+            answers["coverage"] = "A" if found.item.in_contract else "C"
+        return f"; контракт: {found.item.title} ({found.item.billing}, {found.score:.2f})"
 
     def _classify(self, message: Message) -> tuple[Answers, float, str]:
         if message.author_side == "team":

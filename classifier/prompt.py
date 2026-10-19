@@ -5,8 +5,9 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 
+from .contract import render as render_contract
 from .dataset import Case
-from .domain import Answers, Context, Message
+from .domain import Context, Message
 from .questionnaire import QUESTIONS, render
 
 SYSTEM = """Ты — технический менеджер студии разработки. Ты разбираешь сообщения из рабочего чата с заказчиком.
@@ -20,7 +21,8 @@ SYSTEM = """Ты — технический менеджер студии раз
 Ответь на анкету по сообщению. Анкета:
 {questions}
 
-Верни только JSON вида {{"answers": {{"<id>": <значение>, ...}}, "reasoning": "<одно-два предложения>"}}.
+Верни только JSON вида {{"answers": {{"<id>": <значение>, ...}}, "contract_item": "<id задачи из контракта или null>", \
+"reasoning": "<одно-два предложения>"}}.
 Для вопросов с выбором отвечай одной буквой. Если is_task=false, вопросы с пометкой «только если is_task=true» = null."""
 
 
@@ -34,13 +36,19 @@ def format_message(message: Message) -> str:
     return "\n".join(lines)
 
 
-def _answer_json(answers: Answers, note: str = "") -> str:
-    payload = {"answers": {q.id: answers.get(q.id) for q in QUESTIONS}, "reasoning": note}
+def _answer_json(case: Case) -> str:
+    payload = {
+        "answers": {q.id: case.expected.get(q.id) for q in QUESTIONS},
+        "contract_item": case.contract_item,
+        "reasoning": case.note,
+    }
     return json.dumps(payload, ensure_ascii=False)
 
 
 def build_messages(message: Message, examples: Sequence[Case], context: Context | None = None) -> list[dict]:
     system = SYSTEM.format(questions=render())
+    if context and context.contract:
+        system += f"\n\nКонтракт с этим заказчиком (задачи из трекера):\n{render_contract(context.contract)}"
     if context and context.contract_scope:
         system += f"\n\nЧто входит в контракт с этим заказчиком:\n{context.contract_scope}"
     if context and context.project:
@@ -49,6 +57,6 @@ def build_messages(message: Message, examples: Sequence[Case], context: Context 
     chat = [{"role": "system", "content": system}]
     for case in examples:
         chat.append({"role": "user", "content": format_message(case.message)})
-        chat.append({"role": "assistant", "content": _answer_json(case.expected, case.note)})
+        chat.append({"role": "assistant", "content": _answer_json(case)})
     chat.append({"role": "user", "content": format_message(message)})
     return chat

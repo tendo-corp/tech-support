@@ -37,13 +37,15 @@ class Report:
     confusion: Counter = field(default_factory=Counter)
     mistakes: list[tuple[str, str, AnswerValue, AnswerValue]] = field(default_factory=list)
 
+    ITEM = "contract_item"
+
     def accuracy(self, question_id: str) -> float:
         return self.correct[question_id] / self.asked[question_id] if self.asked[question_id] else 0.0
 
     def format(self, verbose: bool = False) -> str:
         lines = [f"engine: {self.engine}   cases: {self.total}   errors: {len(self.failed)}", ""]
-        for q in QUESTIONS:
-            lines.append(f"  {q.id:<20} {self.accuracy(q.id):6.1%}  ({self.correct[q.id]}/{self.asked[q.id]})")
+        for qid in [q.id for q in QUESTIONS] + [self.ITEM]:
+            lines.append(f"  {qid:<20} {self.accuracy(qid):6.1%}  ({self.correct[qid]}/{self.asked[qid]})")
         lines += ["", "  type confusion (expected → predicted):"]
         for (exp, pred), n in sorted(self.confusion.items()):
             if exp != pred:
@@ -63,7 +65,8 @@ def evaluate(engine: Engine, cases: Sequence[Case], client_only: bool = True) ->
             continue
         report.total += 1
         try:
-            predicted = engine.answer(case.message).answers
+            result = engine.answer(case.message, case.context)
+            predicted = result.answers
         except EngineError as exc:
             report.failed.append(f"{case.id}: {exc}")
             continue
@@ -78,6 +81,13 @@ def evaluate(engine: Engine, cases: Sequence[Case], client_only: bool = True) ->
                 report.correct[q.id] += 1
             else:
                 report.mistakes.append((case.id, q.id, expected, got))
+        if case.contract_item:
+            report.asked[Report.ITEM] += 1
+            got_item = result.raw.get("contract_item")
+            if got_item == case.contract_item:
+                report.correct[Report.ITEM] += 1
+            else:
+                report.mistakes.append((case.id, Report.ITEM, case.contract_item, got_item))
     return report
 
 

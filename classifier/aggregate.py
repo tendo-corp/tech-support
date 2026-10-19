@@ -37,6 +37,7 @@ def to_verdict(result: EngineResult) -> Verdict:
         category=CATEGORY_BY_TYPE.get(a.get("type") or "", Category.DISCUSSION),
         is_task=is_task,
         in_scope=(coverage in ("A", "B")) if is_task and coverage in ("A", "B", "C") else None,
+        contract_item=result.raw.get("contract_item"),
         bug_probability=a.get("bug_probability"),
         estimate_hours=HOURS_BY_COMPLEXITY.get(a.get("complexity") or ""),
         priority=PRIORITY_BY_URGENCY.get(a.get("urgency") or ""),
