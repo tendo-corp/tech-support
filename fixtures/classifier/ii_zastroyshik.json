@@ -1,0 +1,181 @@
+{
+  "chat": "ИИ Застройщик авто…",
+  "source": "скриншоты переписки, октябрь 2026",
+  "cases": [
+    {
+      "id": "iz-01",
+      "author": "Марк",
+      "author_side": "team",
+      "text": "@Mitkov96 также предлагаю такой набор статусов по тендеру, что скажешь?",
+      "attachments": [{"kind": "photo", "text": "Таблица статусов тендера."}],
+      "expected": {"is_task": false, "type": "D", "bug_probability": 0, "coverage": "D"}
+    },
+    {
+      "id": "iz-02",
+      "author": "Владислав М.",
+      "text": "@monforje",
+      "attachments": [{"kind": "forward", "text": "Re: AAG Тендер_Внедрение единой системы управления финансами. Усоев Эдуард: Добрый день! Пытаюсь отправить КП, кнопка некликабельна. [скриншот: галочка «Цены указаны с НДС 22%», кнопка «Подать КП»]"}],
+      "expected": {"is_task": true, "type": "A", "bug_probability": 75, "coverage": "A", "complexity": "B", "urgency": "A", "needs_clarification": true},
+      "note": "Подрядчик не может подать КП. Суть только во вложении — бот должен читать вложения/подписи."
+    },
+    {
+      "id": "iz-03",
+      "author": "Владислав М.",
+      "text": "странно, но почему то сегодня другие уже подали кп",
+      "expected": {"is_task": false, "type": "D", "bug_probability": 30, "coverage": "D"},
+      "note": "Контекст к iz-02."
+    },
+    {
+      "id": "iz-04",
+      "author": "Владислав М.",
+      "text": "мб в браузере дело",
+      "expected": {"is_task": false, "type": "D", "bug_probability": 20, "coverage": "D"}
+    },
+    {
+      "id": "iz-05",
+      "author": "Danil Komarov",
+      "author_side": "team",
+      "text": "Я тестировал в Firefox и Chrome\nВсе было хорошо\nСейчас еще посмотрю",
+      "expected": {"is_task": false, "type": "D", "bug_probability": 0, "coverage": "D"}
+    },
+    {
+      "id": "iz-06",
+      "author": "Владислав М.",
+      "text": "Ждем это кп от подрядчика",
+      "expected": {"is_task": false, "type": "D", "bug_probability": 0, "coverage": "D"}
+    },
+    {
+      "id": "iz-07",
+      "author": "Владислав М.",
+      "text": "Не корректно считает",
+      "attachments": [{"kind": "photo", "text": "Список участников тендера: статусы Подано / Доставлено / Доступ закрыт, у поданных «100% · цены: 49 из 49» обведено красным."}],
+      "expected": {"is_task": true, "type": "A", "bug_probability": 70, "coverage": "A", "complexity": "B", "urgency": "B", "needs_clarification": true},
+      "note": "Без скриншота непонятно, что именно считается неверно."
+    },
+    {
+      "id": "iz-08",
+      "author": "Владислав М.",
+      "text": "и вопрос от подрядчика",
+      "expected": {"is_task": false, "type": "D", "bug_probability": 0, "coverage": "D"}
+    },
+    {
+      "id": "iz-09",
+      "author": "Владислав М.",
+      "text": "Как перезагрузить данные ФКП?",
+      "attachments": [{"kind": "forward", "text": "Странно – перед отправкой КП на площадке сверяла сумму по разделам и было именно в такой форме как направила Вам файл. Сейчас вижу на площадке все в основном свалилось в первый раздел. Каким образом можно перезагрузить данные в разрезе ФКП?"}],
+      "expected": {"is_task": true, "type": "A", "bug_probability": 70, "coverage": "A", "complexity": "C", "urgency": "B", "needs_clarification": false},
+      "note": "Сформулировано как вопрос, но по сути баг: позиции «свалились» в первый раздел."
+    },
+    {
+      "id": "iz-10",
+      "author": "Владислав М.",
+      "text": "Всем привет\nЕсть новости?",
+      "expected": {"is_task": false, "type": "D", "bug_probability": 0, "coverage": "D"}
+    },
+    {
+      "id": "iz-11",
+      "author": "Марк",
+      "author_side": "team",
+      "text": "Привет, в работе",
+      "expected": {"is_task": false, "type": "D", "bug_probability": 0, "coverage": "D"}
+    },
+    {
+      "id": "iz-12",
+      "author": "Владислав М.",
+      "text": "https://tender.aag.company/tenders/178?p=overview\n\nНе все разделы распознаны корректно, например в разделе 3 подразделы 3.1, 3.2, 3.3 и т.д. распознаны как позиции для заполнения и отображаются как пропущенные,\n\nпри этом общая сумма вроде бьется, но при выгрузке формулы другие, и суммирование идет по другому, и в выгруженной СТшке формулы отличаются от формул в ФКП",
+      "attachments": [{"kind": "document", "text": "image_2026-10-13_11-01-00.png ×2"}],
+      "expected": {"is_task": true, "type": "A", "bug_probability": 85, "coverage": "A", "complexity": "C", "urgency": "B", "needs_clarification": false},
+      "note": "Ошибка парсинга ФКП. Исправление потом выкатили «на новые загрузки»."
+    },
+    {
+      "id": "iz-13",
+      "author": "Владислав М.",
+      "text": "какой ответ?",
+      "expected": {"is_task": false, "type": "D", "bug_probability": 0, "coverage": "D"}
+    },
+    {
+      "id": "iz-14",
+      "author": "Марк",
+      "author_side": "team",
+      "text": "В работе, разбираемся",
+      "expected": {"is_task": false, "type": "D", "bug_probability": 0, "coverage": "D"}
+    },
+    {
+      "id": "iz-15",
+      "author": "Danil Komarov",
+      "author_side": "team",
+      "text": "Исправление действует на новые загрузки. Уже созданный тендер 178 остаётся в прежнем виде.",
+      "expected": {"is_task": false, "type": "D", "bug_probability": 0, "coverage": "D"}
+    },
+    {
+      "id": "iz-16",
+      "author": "Владислав М.",
+      "reply_to": "AAG_ФКП_тендерное_предложение_Те….xlsx",
+      "text": "Вот как раз поэтому и был запрос, чтобы не могли менять форму Эксель",
+      "expected": {"is_task": false, "type": "D", "bug_probability": 10, "coverage": "D"},
+      "note": "Отсылка к уже сделанному запросу. Команда ответила: участник теперь может только заполнять ФКП, шаблон закрыт."
+    },
+    {
+      "id": "iz-17",
+      "author": "Марк",
+      "author_side": "team",
+      "text": "С этим кейсом ситуация остается прежняя:\n1. Система не поддерживает изменение структуры от файла шаблона\n2. Она не поддерживает нестандартные колонки. Данных для СТ просто не будет хватать\n\nЭтот кейс отлично ляжет в расширение СТ в будущем",
+      "expected": {"is_task": false, "type": "D", "bug_probability": 0, "coverage": "D"},
+      "note": "Начало обрезано. Пример того, как команда отказывает: «ляжет в расширение» = выход за рамки."
+    },
+    {
+      "id": "iz-18",
+      "author": "Владислав М.",
+      "text": "ок, спасибо",
+      "expected": {"is_task": false, "type": "E", "bug_probability": 0, "coverage": "D"}
+    },
+    {
+      "id": "iz-19",
+      "author": "Владислав М.",
+      "text": "Почему в моем тендере появилось 2 новых участника?",
+      "expected": {"is_task": true, "type": "A", "bug_probability": 50, "coverage": "A", "complexity": "A", "urgency": "C", "needs_clarification": false},
+      "note": "Выглядит как подозрение на баг, нужно расследовать. Оказалось — команда воспроизводила ошибку на его тендере."
+    },
+    {
+      "id": "iz-20",
+      "author": "Владислав М.",
+      "text": "по логам они просто появились",
+      "expected": {"is_task": false, "type": "D", "bug_probability": 50, "coverage": "D"}
+    },
+    {
+      "id": "iz-21",
+      "author": "Владислав М.",
+      "text": "а как их удалить?\nможно ведь только заблокировать доступ",
+      "expected": {"is_task": false, "type": "C", "bug_probability": 0, "coverage": "D"},
+      "note": "Вопрос; при этом намекает на отсутствие функции удаления — команда позже прислала инструкцию «удаление поставщика из тендера»."
+    },
+    {
+      "id": "iz-22",
+      "author": "Владислав М.",
+      "text": "да",
+      "expected": {"is_task": false, "type": "E", "bug_probability": 0, "coverage": "D"}
+    },
+    {
+      "id": "iz-23",
+      "author": "Danil Komarov",
+      "author_side": "team",
+      "reply_to": "@Mitkov96 также предлагаю такой набор статусов по тендеру, что скажешь?",
+      "text": "@Mitkov96\nЭто утверждаем?",
+      "expected": {"is_task": false, "type": "D", "bug_probability": 0, "coverage": "D"}
+    },
+    {
+      "id": "iz-24",
+      "author": "Владислав М.",
+      "reply_to": "@Mitkov96 Это утверждаем?",
+      "text": "Вопрос в другой чат",
+      "expected": {"is_task": false, "type": "D", "bug_probability": 0, "coverage": "D"}
+    },
+    {
+      "id": "iz-25",
+      "author": "Владислав М.",
+      "text": "можете напомнить, как закрыть доступ на участие в тендере.?",
+      "expected": {"is_task": false, "type": "C", "bug_probability": 0, "coverage": "D"},
+      "note": "Команда ответила PDF-инструкцией."
+    }
+  ]
+}
