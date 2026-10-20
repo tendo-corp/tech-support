@@ -113,15 +113,23 @@ class Bot:
         }
 
     def _should_report(self, verdict: Verdict) -> bool:
+        if self.settings.echo_reports:
+            return True
         return self.settings.notify_chat_id is not None and (verdict.is_task or verdict.category.value == "question")
 
     def _report(self, inc: Incoming, verdict: Verdict, contract) -> None:
         text = format_report(verdict, chat=inc.chat_title, author=inc.author, text=inc.text,
                              link=inc.link, contract=contract)
-        try:
-            self.telegram.send_message(self.settings.notify_chat_id, text)
-        except TelegramError as exc:
-            log.error("report failed: %s", exc)
+        targets = []
+        if self.settings.notify_chat_id is not None and (verdict.is_task or verdict.category.value == "question"):
+            targets.append((self.settings.notify_chat_id, None))
+        if self.settings.echo_reports:
+            targets.append((inc.chat_id, inc.message_id))
+        for chat_id, reply_to in targets:
+            try:
+                self.telegram.send_message(chat_id, text, reply_to)
+            except TelegramError as exc:
+                log.error("report to %s failed: %s", chat_id, exc)
 
     def _command(self, inc: Incoming, is_team: bool) -> str:
         name, arg = inc.command

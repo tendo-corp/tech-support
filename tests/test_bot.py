@@ -6,6 +6,7 @@ import pytest
 from bot.config import Settings
 from bot.report import format_report
 from bot.service import Bot
+from bot.storage import MemoryStorage
 from bot.updates import parse
 from classifier.aggregate import to_verdict
 from classifier.contract import load_contracts
@@ -38,27 +39,6 @@ class FakeTelegram:
         return "data:image/jpeg;base64,AAAA"
 
 
-class FakeStorage:
-    def __init__(self):
-        self.messages: dict[tuple[int, int], dict] = {}
-        self.chats: dict[int, dict] = {}
-
-    def upsert_message(self, row):
-        key = (row["chat_id"], row["message_id"])
-        self.messages[key] = {**self.messages.get(key, {}), **row}
-
-    def get_message(self, chat_id, message_id):
-        return self.messages.get((chat_id, message_id))
-
-    def chat_contract(self, chat_id):
-        return self.chats.get(chat_id, {}).get("contract_id")
-
-    def upsert_chat(self, chat_id, title, contract_id=None):
-        row = self.chats.setdefault(chat_id, {"title": title})
-        if contract_id is not None:
-            row["contract_id"] = contract_id
-
-
 @pytest.fixture
 def setup():
     requests = []
@@ -72,7 +52,7 @@ def setup():
     settings = Settings(telegram_token="t", webhook_secret="s", supabase_url="u", supabase_key="k",
                         notify_chat_id=-100999, team_user_ids=frozenset({TEAM_ID}))
     jev = Jev(JevConfig(api_key="k"), client=httpx.Client(transport=httpx.MockTransport(handler)))
-    bot = Bot(settings, FakeTelegram(), FakeStorage(), jev)
+    bot = Bot(settings, FakeTelegram(), MemoryStorage(), jev)
     return bot, requests
 
 
@@ -178,3 +158,12 @@ def test_report_escapes_html():
     text = format_report(verdict, chat="A&B", author="<script>", text="1 < 2", link=None,
                          contract=load_contracts()["aag_tenders"])
     assert "&lt;script&gt;" in text and "1 &lt; 2" in text and "A&amp;B" in text and "&lt;b&gt;x" in text
+
+
+def test_echo_mode_replies_in_source_chat(setup):
+    from dataclasses import replace
+
+    bot, _ = setup
+    bot.settings = replace(bot.settings, echo_reports=True, notify_chat_id=None)
+    bot.handle(update("Подрядчик загрузил Excel, а цены пустые"))
+    assert [chat for chat, _ in bot.telegram.sent] == [CHAT]

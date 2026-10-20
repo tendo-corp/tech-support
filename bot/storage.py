@@ -44,3 +44,26 @@ class Storage:
             row["contract_id"] = contract_id
         self._request("POST", "chats", params={"on_conflict": "chat_id"}, json=row,
                       prefer="resolution=merge-duplicates,return=minimal")
+
+
+class MemoryStorage:
+    """Same interface as Storage, kept in process memory: for local runs and tests without Supabase."""
+
+    def __init__(self):
+        self.messages: dict[tuple[int, int], dict] = {}
+        self.chats: dict[int, dict] = {}
+
+    def upsert_message(self, row: dict) -> None:
+        key = (row["chat_id"], row["message_id"])
+        self.messages[key] = {**self.messages.get(key, {}), **row}
+
+    def get_message(self, chat_id: int, message_id: int) -> dict | None:
+        return self.messages.get((chat_id, message_id))
+
+    def chat_contract(self, chat_id: int) -> str | None:
+        return self.chats.get(chat_id, {}).get("contract_id")
+
+    def upsert_chat(self, chat_id: int, title: str, contract_id: str | None = None) -> None:
+        row = self.chats.setdefault(chat_id, {"title": title})
+        if contract_id is not None:
+            row["contract_id"] = contract_id

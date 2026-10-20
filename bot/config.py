@@ -28,6 +28,8 @@ class Settings:
     team_usernames: frozenset[str] = frozenset()
     # Contract for chats that have no explicit binding in the chats table.
     default_contract: str = "aag_tenders"
+    # Debug: also answer with the report right in the chat the message came from.
+    echo_reports: bool = False
 
     def is_team(self, user_id: int | None, username: str | None) -> bool:
         return (user_id in self.team_user_ids) or bool(username and username.lower() in self.team_usernames)
@@ -45,6 +47,7 @@ class Settings:
             team_user_ids=_ints(env("TEAM_USER_IDS", "")),
             team_usernames=_names(env("TEAM_USERNAMES", "")),
             default_contract=env("DEFAULT_CONTRACT", "aag_tenders"),
+            echo_reports=env("ECHO_REPORTS", "") in ("1", "true", "yes"),
         )
 
     def missing(self) -> list[str]:
