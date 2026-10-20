@@ -67,6 +67,8 @@ class Message:
     author_side: str = "client"
     reply_to: str | None = None
     attachments: tuple[Attachment, ...] = ()
+    # Screenshots as data: URLs, sent to JEV as images (never Telegram file URLs: they contain the bot token).
+    images: tuple[str, ...] = ()
 
     @property
     def full_text(self) -> str:

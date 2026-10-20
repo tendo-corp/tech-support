@@ -1,0 +1,8 @@
+{
+  "functions": {
+    "api/webhook.py": {
+      "maxDuration": 60,
+      "includeFiles": "{bot,classifier,fixtures}/**"
+    }
+  }
+}

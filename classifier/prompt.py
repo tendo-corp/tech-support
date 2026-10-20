@@ -57,5 +57,11 @@ def build_messages(message: Message, examples: Sequence[Case], context: Context 
     for case in examples:
         chat.append({"role": "user", "content": format_message(case.message)})
         chat.append({"role": "assistant", "content": _answer_json(case)})
-    chat.append({"role": "user", "content": format_message(message)})
+    text = format_message(message)
+    if message.images:
+        parts: list[dict] = [{"type": "text", "text": text + "\nСкриншоты из сообщения приложены."}]
+        parts += [{"type": "image_url", "image_url": {"url": url}} for url in message.images]
+        chat.append({"role": "user", "content": parts})
+    else:
+        chat.append({"role": "user", "content": text})
     return chat
