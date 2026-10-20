@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 class Incoming:
     chat_id: int
     chat_title: str
+    is_private: bool
     message_id: int
     thread_id: int | None
     user_id: int | None
@@ -65,6 +66,7 @@ def parse(update: dict) -> Incoming | None:
     return Incoming(
         chat_id=msg["chat"]["id"],
         chat_title=msg["chat"].get("title") or _name(msg["chat"]),
+        is_private=msg["chat"].get("type") == "private",
         message_id=msg["message_id"],
         thread_id=msg.get("message_thread_id"),
         user_id=user.get("id"),

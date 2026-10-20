@@ -15,17 +15,24 @@ from classifier.jev import Jev, JevConfig
 from classifier.questionnaire import normalize_answers
 
 CHAT = -1001234567890
-TEAM_ID = 7
+ME_DM = 555  # private chat of the report recipient
 BUG = {"is_task": True, "type": "A", "bug_probability": 90, "coverage": "A", "contract_match": "A",
        "complexity": "B", "urgency": "B", "needs_clarification": False}
+NOISE = {"is_task": False, "type": "E", "bug_probability": 0, "coverage": "D"}
 
 
-def update(text="", *, user_id=1, username="client", message_id=10, chat=CHAT, edited=False, **extra):
-    msg = {"message_id": message_id, "date": 1760000000, "chat": {"id": chat, "title": "AAG & Tendo_ТП", "type": "supergroup"},
+def update(text="", *, username="Mitkov96", user_id=1, message_id=10, chat=CHAT, chat_type="supergroup",
+           edited=False, **extra):
+    msg = {"message_id": message_id, "date": 1760000000,
+           "chat": {"id": chat, "title": "AAG & Tendo_ТП", "type": chat_type},
            "from": {"id": user_id, "is_bot": False, "first_name": "Влад", "username": username}, **extra}
     if text:
         msg["text"] = text
     return {"update_id": 1, ("edited_message" if edited else "message"): msg}
+
+
+def dm(text, username="monforje"):
+    return update(text, username=username, user_id=ME_DM, chat=ME_DM, chat_type="private")
 
 
 class FakeTelegram:
@@ -39,20 +46,26 @@ class FakeTelegram:
         return "data:image/jpeg;base64,AAAA"
 
 
+def _jev_replying(answers, requests=None):
+    def handler(request):
+        if requests is not None:
+            requests.append(json.loads(request.content))
+        content = json.dumps({"answers": answers, "contract_item": "869fbn5vy" if answers.get("is_task") else None,
+                              "reasoning": "сломана загрузка Excel"})
+        return httpx.Response(200, json={"model": "z-ai/glm-5.3-flash", "choices": [{"message": {"content": content}}],
+                                         "usage": {"cost": 0.0003}})
+    return Jev(JevConfig(api_key="k"), client=httpx.Client(transport=httpx.MockTransport(handler)))
+
+
 @pytest.fixture
 def setup():
     requests = []
-
-    def handler(request):
-        requests.append(json.loads(request.content))
-        content = json.dumps({"answers": BUG, "contract_item": "869fbn5vy", "reasoning": "сломана загрузка Excel"})
-        return httpx.Response(200, json={"model": "z-ai/glm-5.3-flash", "choices": [{"message": {"content": content}}],
-                                         "usage": {"cost": 0.0003}})
-
     settings = Settings(telegram_token="t", webhook_secret="s", supabase_url="u", supabase_key="k",
-                        notify_chat_id=-100999, team_user_ids=frozenset({TEAM_ID}))
-    jev = Jev(JevConfig(api_key="k"), client=httpx.Client(transport=httpx.MockTransport(handler)))
-    bot = Bot(settings, FakeTelegram(), MemoryStorage(), jev)
+                        client_usernames=frozenset({"mitkov96", "belphegorr"}),
+                        report_usernames=frozenset({"monforje"}))
+    bot = Bot(settings, FakeTelegram(), MemoryStorage(), _jev_replying(BUG, requests))
+    bot.handle(dm("/start"))  # recipient subscribes
+    bot.telegram.sent.clear()
     return bot, requests
 
 
@@ -62,11 +75,11 @@ def test_parse_photo_with_caption_reply_and_forward():
     inc = parse(update(caption="кнопка некликабельна", photo=[{"file_id": "small"}, {"file_id": "big"}],
                        reply_to_message={"message_id": 3, "text": "Взяли в работу"},
                        forward_origin={"type": "user", "sender_user": {"first_name": "Эдуард"}}))
-    assert inc.text == "кнопка некликабельна"
-    assert inc.photo_file_id == "big"
+    assert inc.text == "кнопка некликабельна" and inc.photo_file_id == "big"
     assert inc.reply_to_text == "Взяли в работу" and inc.reply_to_message_id == 3
     assert inc.forwarded_from == "Эдуард"
     assert inc.link == "https://t.me/c/1234567890/10"
+    assert not inc.is_private and parse(dm("x")).is_private
 
 
 def test_parse_command_with_bot_mention():
@@ -78,22 +91,65 @@ def test_parse_ignores_non_messages():
     assert parse({"update_id": 1, "my_chat_member": {}}) is None
 
 
-# --- service ------------------------------------------------------------------
+# --- subscription -------------------------------------------------------------
 
-def test_customer_bug_is_classified_stored_and_reported(setup):
+def test_recipient_subscribes_from_private_chat():
+    settings = Settings(telegram_token="t", webhook_secret="s", supabase_url="u", supabase_key="k",
+                        client_usernames=frozenset({"mitkov96"}), report_usernames=frozenset({"monforje"}))
+    bot = Bot(settings, FakeTelegram(), MemoryStorage(), _jev_replying(BUG))
+    assert bot.handle(dm("/start")) == "subscribed"
+    assert bot.storage.recipient_chats() == [ME_DM]
+    assert "@mitkov96" in bot.telegram.sent[0][1]
+
+
+def test_strangers_in_private_are_ignored(setup):
+    bot, requests = setup
+    assert bot.handle(dm("привет", username="random")) == "ignored: private from stranger"
+    assert requests == [] and bot.telegram.sent == []
+
+
+# --- group messages -----------------------------------------------------------
+
+def test_client_bug_is_classified_stored_and_sent_to_my_dm(setup):
     bot, requests = setup
     assert bot.handle(update("Подрядчик загрузил Excel, а цены пустые")) == "classified: bug"
 
     row = bot.storage.messages[(CHAT, 10)]
-    assert row["category"] == "bug" and row["in_scope"] is True
+    assert row["category"] == "bug" and row["in_scope"] is True and row["author_side"] == "client"
     assert row["contract_item"] == "869fbn5vy" and row["model"] == "z-ai/glm-5.3-flash"
-    assert row["estimate_min_h"] == 1 and row["cost_usd"] == 0.0003
-    # contract from DEFAULT_CONTRACT reaches the prompt
-    assert "869fbn5vy" in requests[0]["messages"][0]["content"]
+    assert "869fbn5vy" in requests[0]["messages"][0]["content"]  # contract reached the prompt
 
     (chat_id, report), = bot.telegram.sent
-    assert chat_id == -100999
-    assert "Баг" in report and "Подача КП из Excel" in report and "https://t.me/c/1234567890/10" in report
+    assert chat_id == ME_DM
+    assert "Баг" in report and "Подача КП из Excel" in report and "@Mitkov96" in report
+    assert "https://t.me/c/1234567890/10" in report
+
+
+def test_client_usernames_are_case_insensitive(setup):
+    bot, requests = setup
+    assert bot.handle(update("упало", username="BelphegorR")) == "classified: bug"
+
+
+def test_non_clients_are_stored_not_classified(setup):
+    bot, requests = setup
+    assert bot.handle(update("Взяли в работу", username="monforje")) == "stored: not a client"
+    assert bot.handle(update("тоже вопрос", username=None, message_id=11)) == "stored: not a client"
+    assert requests == [] and bot.telegram.sent == []
+    assert bot.storage.messages[(CHAT, 10)]["author_side"] == "team"
+
+
+def test_noise_is_not_reported(setup):
+    bot, _ = setup
+    bot.jev = _jev_replying(NOISE)
+    assert bot.handle(update("Спасибо!")) == "classified: noise"
+    assert bot.telegram.sent == []
+
+
+def test_discussion_is_reported(setup):
+    bot, _ = setup
+    bot.jev = _jev_replying({**NOISE, "type": "D"})
+    assert bot.handle(update("Есть новости?")) == "classified: discussion"
+    assert len(bot.telegram.sent) == 1
 
 
 def test_screenshot_goes_to_jev_as_image(setup):
@@ -101,12 +157,6 @@ def test_screenshot_goes_to_jev_as_image(setup):
     bot.handle(update(caption="вот", photo=[{"file_id": "p"}]))
     content = requests[0]["messages"][-1]["content"]
     assert content[1] == {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,AAAA"}}
-
-
-def test_team_messages_are_stored_not_classified(setup):
-    bot, requests = setup
-    assert bot.handle(update("Взяли в работу", user_id=TEAM_ID)) == "stored: team"
-    assert requests == [] and bot.storage.messages[(CHAT, 10)]["author_side"] == "team"
 
 
 def test_redelivered_update_is_not_reclassified(setup):
@@ -123,34 +173,29 @@ def test_edited_message_is_reclassified(setup):
     assert len(requests) == 2 and bot.storage.messages[(CHAT, 10)]["edited"] is True
 
 
-def test_noise_is_stored_but_not_reported(setup):
-    bot, _ = setup
-    bot.jev.client = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(200, json={
-        "model": "m", "choices": [{"message": {"content": json.dumps({"answers": {
-            "is_task": False, "type": "E", "bug_probability": 0, "coverage": "D"}, "contract_item": None, "reasoning": ""})}}]})))
-    assert bot.handle(update("Спасибо!")) == "classified: noise"
-    assert bot.telegram.sent == []
-
-
 def test_jev_failure_is_recorded(setup):
     bot, _ = setup
-    bot.jev.client = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(401, text="bad key")))
+    bot.jev = Jev(JevConfig(api_key="k"), client=httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(401, text="bad key"))))
     assert bot.handle(update("упало всё")) == "error: jev"
     assert "401" in bot.storage.messages[(CHAT, 10)]["error"]
 
 
-def test_contract_command_is_team_only(setup):
-    bot, _ = setup
-    assert bot.handle(update("/contract aag_tenders")) == "ignored: command from non-team"
-    assert bot.handle(update("/contract aag_tenders", user_id=TEAM_ID)) == "command: contract set"
-    assert bot.storage.chats[CHAT]["contract_id"] == "aag_tenders"
-    assert bot.handle(update("/contract nope", user_id=TEAM_ID)) == "command: contract unknown"
+# --- private test drive & commands --------------------------------------------
 
-
-def test_notify_chat_itself_is_ignored(setup):
+def test_text_in_my_dm_is_a_test_drive(setup):
     bot, requests = setup
-    assert bot.handle(update("Баг!", chat=-100999)) == "ignored: notify chat"
-    assert requests == []
+    assert bot.handle(dm("Не грузится Excel у подрядчика")) == "test: bug"
+    (chat_id, report), = bot.telegram.sent
+    assert chat_id == ME_DM and "Баг" in report
+    assert bot.storage.messages == {}  # test drives are not stored
+
+
+def test_contract_command_is_recipient_only(setup):
+    bot, _ = setup
+    assert bot.handle(update("/contract aag_tenders")) == "ignored: command from non-recipient"
+    assert bot.handle(update("/contract aag_tenders", username="monforje")) == "command: contract set"
+    assert bot.storage.chats[CHAT]["contract_id"] == "aag_tenders"
+    assert bot.handle(update("/contract nope", username="monforje")) == "command: contract unknown"
 
 
 def test_report_escapes_html():
@@ -158,12 +203,3 @@ def test_report_escapes_html():
     text = format_report(verdict, chat="A&B", author="<script>", text="1 < 2", link=None,
                          contract=load_contracts()["aag_tenders"])
     assert "&lt;script&gt;" in text and "1 &lt; 2" in text and "A&amp;B" in text and "&lt;b&gt;x" in text
-
-
-def test_echo_mode_replies_in_source_chat(setup):
-    from dataclasses import replace
-
-    bot, _ = setup
-    bot.settings = replace(bot.settings, echo_reports=True, notify_chat_id=None)
-    bot.handle(update("Подрядчик загрузил Excel, а цены пустые"))
-    assert [chat for chat, _ in bot.telegram.sent] == [CHAT]

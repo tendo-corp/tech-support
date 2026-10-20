@@ -45,6 +45,14 @@ class Storage:
         self._request("POST", "chats", params={"on_conflict": "chat_id"}, json=row,
                       prefer="resolution=merge-duplicates,return=minimal")
 
+    def upsert_recipient(self, username: str, chat_id: int) -> None:
+        self._request("POST", "recipients", params={"on_conflict": "username"},
+                      json={"username": username.lower(), "chat_id": chat_id},
+                      prefer="resolution=merge-duplicates,return=minimal")
+
+    def recipient_chats(self) -> list[int]:
+        return [r["chat_id"] for r in self._request("GET", "recipients", params={"select": "chat_id"})]
+
 
 class MemoryStorage:
     """Same interface as Storage, kept in process memory: for local runs and tests without Supabase."""
@@ -52,6 +60,7 @@ class MemoryStorage:
     def __init__(self):
         self.messages: dict[tuple[int, int], dict] = {}
         self.chats: dict[int, dict] = {}
+        self.recipients: dict[str, int] = {}
 
     def upsert_message(self, row: dict) -> None:
         key = (row["chat_id"], row["message_id"])
@@ -67,3 +76,9 @@ class MemoryStorage:
         row = self.chats.setdefault(chat_id, {"title": title})
         if contract_id is not None:
             row["contract_id"] = contract_id
+
+    def upsert_recipient(self, username: str, chat_id: int) -> None:
+        self.recipients[username.lower()] = chat_id
+
+    def recipient_chats(self) -> list[int]:
+        return list(self.recipients.values())

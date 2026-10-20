@@ -8,7 +8,7 @@ from html import escape
 from classifier.aggregate import to_verdict
 from classifier.contract import load_contracts
 from classifier.dataset import load_cases
-from classifier.domain import Attachment, Context, Message, Verdict
+from classifier.domain import Attachment, Category, Context, Message, Verdict
 from classifier.fewshot import FewShotSelector
 from classifier.jev import Jev, JevConfig, JevError
 
@@ -20,12 +20,15 @@ from .updates import Incoming, parse
 
 log = logging.getLogger(__name__)
 
-HELP = """Я читаю чат с заказчиком и разбираю каждое сообщение: баг или выход за рамки контракта, сколько займёт, насколько срочно.
+HELP = """Я читаю чат с заказчиком и разбираю сообщения заказчиков: баг или выход за рамки контракта, сколько займёт, насколько срочно. Разбор присылаю в личку.
 
-Команды (только для команды):
-/chatid — id этого чата
+Команды:
 /contract — какой контракт привязан к чату
-/contract &lt;id&gt; — привязать контракт ({contracts})"""
+/contract &lt;id&gt; — привязать контракт ({contracts})
+
+В личке: напиши любое сообщение «от заказчика» — пришлю разбор, чтобы проверить."""
+
+SUBSCRIBED = "Готово, буду присылать сюда разбор сообщений от: {clients}.\nМожешь проверить — напиши сюда любое сообщение «от заказчика»."
 
 
 class Bot:
@@ -53,26 +56,25 @@ class Bot:
             return "ignored: not a message"
         if inc.is_bot:
             return "ignored: bot"
-        is_team = self.settings.is_team(inc.user_id, inc.username)
+        if inc.is_private:
+            return self._private(inc)
         if inc.command:
-            return self._command(inc, is_team)
-        if inc.chat_id == self.settings.notify_chat_id:
-            return "ignored: notify chat"
+            return self._command(inc)
 
         self.storage.upsert_chat(inc.chat_id, inc.chat_title)
-        row = self._row(inc, "team" if is_team else "client")
-        if is_team or not (inc.text or inc.photo_file_id):
+        is_client = self.settings.is_client(inc.username)
+        row = self._row(inc, "client" if is_client else "team")
+        if not is_client or not (inc.text or inc.photo_file_id):
             self.storage.upsert_message(row)
-            return "stored: team" if is_team else "stored: no text"
+            return "stored: not a client" if not is_client else "stored: no text"
 
         existing = self.storage.get_message(inc.chat_id, inc.message_id)
         if existing and existing.get("category") and existing.get("text") == inc.text:
             return "skipped: already classified"  # Telegram re-delivered the update
 
-        contract = self.contracts.get(self.storage.chat_contract(inc.chat_id) or self.settings.default_contract)
-        context = Context(project=inc.chat_title, contract=contract)
+        contract = self._contract(inc.chat_id)
         try:
-            result = self.jev.answer(self._message(inc), context)
+            result = self.jev.answer(self._message(inc), Context(project=inc.chat_title, contract=contract))
         except JevError as exc:
             log.error("JEV failed for %s/%s: %s", inc.chat_id, inc.message_id, exc)
             self.storage.upsert_message({**row, "error": str(exc)[:1000]})
@@ -80,9 +82,36 @@ class Bot:
 
         verdict = to_verdict(result)
         self.storage.upsert_message({**row, **_verdict_columns(verdict, result.raw), "error": None})
-        if self._should_report(verdict):
-            self._report(inc, verdict, contract)
+        if verdict.category is not Category.NOISE:
+            report = format_report(verdict, chat=inc.chat_title, author=_who(inc), text=inc.text,
+                                   link=inc.link, contract=contract)
+            for chat_id in self.storage.recipient_chats():
+                self._send(chat_id, report)
         return f"classified: {verdict.category.value}"
+
+    def _private(self, inc: Incoming) -> str:
+        """Private chat: only recipients. Any message subscribes them; plain text is a test drive."""
+        if not self.settings.is_recipient(inc.username):
+            return "ignored: private from stranger"
+        self.storage.upsert_recipient(inc.username, inc.chat_id)
+        if inc.command:
+            if inc.command[0] in ("/start", "/help"):
+                clients = ", ".join(f"@{c}" for c in sorted(self.settings.client_usernames)) or "—"
+                self._send(inc.chat_id, SUBSCRIBED.format(clients=clients))
+                return "subscribed"
+            return self._command(inc)
+        if not (inc.text or inc.photo_file_id):
+            return "ignored: empty"
+        contract = self._contract(inc.chat_id)
+        try:
+            result = self.jev.answer(self._message(inc), Context(project="проверка в личке", contract=contract))
+        except JevError as exc:
+            self._send(inc.chat_id, f"JEV не ответил: {escape(str(exc)[:300])}", inc.message_id)
+            return "error: jev"
+        verdict = to_verdict(result)
+        self._send(inc.chat_id, format_report(verdict, chat="проверка", author=_who(inc), text=inc.text,
+                                              link=None, contract=contract), inc.message_id)
+        return f"test: {verdict.category.value}"
 
     # --- helpers ---------------------------------------------------------------
 
@@ -112,47 +141,38 @@ class Bot:
             "has_photo": bool(inc.photo_file_id), "sent_at": inc.sent_at, "edited": inc.edited,
         }
 
-    def _should_report(self, verdict: Verdict) -> bool:
-        if self.settings.echo_reports:
-            return True
-        return self.settings.notify_chat_id is not None and (verdict.is_task or verdict.category.value == "question")
+    def _contract(self, chat_id: int):
+        return self.contracts.get(self.storage.chat_contract(chat_id) or self.settings.default_contract)
 
-    def _report(self, inc: Incoming, verdict: Verdict, contract) -> None:
-        text = format_report(verdict, chat=inc.chat_title, author=inc.author, text=inc.text,
-                             link=inc.link, contract=contract)
-        targets = []
-        if self.settings.notify_chat_id is not None and (verdict.is_task or verdict.category.value == "question"):
-            targets.append((self.settings.notify_chat_id, None))
-        if self.settings.echo_reports:
-            targets.append((inc.chat_id, inc.message_id))
-        for chat_id, reply_to in targets:
-            try:
-                self.telegram.send_message(chat_id, text, reply_to)
-            except TelegramError as exc:
-                log.error("report to %s failed: %s", chat_id, exc)
+    def _send(self, chat_id: int, text: str, reply_to: int | None = None) -> None:
+        try:
+            self.telegram.send_message(chat_id, text, reply_to)
+        except TelegramError as exc:
+            log.error("send to %s failed: %s", chat_id, exc)
 
-    def _command(self, inc: Incoming, is_team: bool) -> str:
+    def _command(self, inc: Incoming) -> str:
         name, arg = inc.command
         if name in ("/start", "/help"):
-            self.telegram.send_message(inc.chat_id, HELP.format(contracts=", ".join(self.contracts)), inc.message_id)
+            self._send(inc.chat_id, HELP.format(contracts=", ".join(self.contracts)), inc.message_id)
             return "command: help"
-        if not is_team:
-            return "ignored: command from non-team"
-        if name == "/chatid":
-            self.telegram.send_message(inc.chat_id, f"chat_id: <code>{inc.chat_id}</code>", inc.message_id)
-            return "command: chatid"
+        if not self.settings.is_recipient(inc.username):
+            return "ignored: command from non-recipient"
         if name == "/contract":
             if arg:
                 if arg not in self.contracts:
-                    self.telegram.send_message(inc.chat_id, f"Нет контракта «{escape(arg)}». Есть: {', '.join(self.contracts)}", inc.message_id)
+                    self._send(inc.chat_id, f"Нет контракта «{escape(arg)}». Есть: {', '.join(self.contracts)}", inc.message_id)
                     return "command: contract unknown"
                 self.storage.upsert_chat(inc.chat_id, inc.chat_title, arg)
-                self.telegram.send_message(inc.chat_id, f"Контракт чата: <b>{escape(arg)}</b>", inc.message_id)
+                self._send(inc.chat_id, f"Контракт чата: <b>{escape(arg)}</b>", inc.message_id)
                 return "command: contract set"
             current = self.storage.chat_contract(inc.chat_id) or f"{self.settings.default_contract} (по умолчанию)"
-            self.telegram.send_message(inc.chat_id, f"Контракт чата: <b>{escape(current)}</b>", inc.message_id)
+            self._send(inc.chat_id, f"Контракт чата: <b>{escape(current)}</b>", inc.message_id)
             return "command: contract show"
         return "ignored: unknown command"
+
+
+def _who(inc: Incoming) -> str:
+    return f"{inc.author} (@{inc.username})" if inc.username else inc.author
 
 
 def _verdict_columns(verdict: Verdict, raw: dict) -> dict:
